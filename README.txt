@@ -1,5 +1,5 @@
 # Minecraft Sniper
-Automatic Minecraft key authentication, name availabilty checking, and name claiming.
+Automatic Minecraft key authentication, name availability checking, and name claiming.
 
 Add your Microsoft accounts into the `users.txt`, one email per line.
 Every account doesn't need to own minecraft, but they must be set up with an Xbox profile.
