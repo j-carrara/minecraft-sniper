@@ -1,0 +1,5 @@
+# Put one login email on each line.
+# Accounts don't need to own minecraft, but they must be set up with an Xbox profile.
+# More accounts means that the bot will find username availability more quickly.
+
+minecraftplayer@outlook.com
