@@ -1,4 +1,4 @@
-# Minecraft Sniper
+# Minecraft Username Sniper
 Automatic Minecraft key authentication, name availability checking, and name claiming.
 
 Every account doesn't need to own minecraft, but they must be set up with an Xbox profile.
