@@ -25,23 +25,21 @@ def check_name(name, token):
     return content["status"] == "AVAILABLE"
 
 
-def name_wait(name, accounts, test=False):
+def name_wait(name, accounts, name_change=False):
     log(f"Retrieving tokens for all accounts.")
     tokens, token_time = refresh_tokens(accounts)
-    log(f"Login tokens will expire on {token_time+timedelta(hours=24)}.")
     current_token = 0
     log(f'Name snipe service started for "{name}", will query every {10/len(tokens)}s for availability.')
     while True:
         if (datetime.now() - timedelta(hours=23)) > token_time:
             log(f"Tokens expiring soon, refreshing.")
             tokens, token_time = refresh_tokens(accounts)
-            log(f"New login tokens will expire on {token_time}.")
 
         try:
             available = check_name(name, tokens[current_token])
             if available:
                 log(f"{name} is now available: {datetime.now().strftime(TIME_FORMAT)}")
-                if test == False:
+                if name_change == True:
                     requests.put(
                         f"https://api.minecraftservices.com/minecraft/profile/name/{name}", headers={"Authorization": tokens[0], })
                 return True

@@ -198,4 +198,5 @@ def refresh_tokens(accounts):
             else:
                 log(f'Token {i+1} for account "{account}" retrieved from cache. ({len(token_list)-(i*5)}/{len(accounts)} accounts) ({i+1}/2 token sets)')
 
+    log(f"Login tokens will expire on {min(timestamps)+timedelta(hours=24)}.")
     return (token_list, min(timestamps))
