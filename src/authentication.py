@@ -15,8 +15,9 @@ import json
 import queue
 from datetime import datetime, timedelta
 from typing import Optional
+import asyncio
 
-from util import log, rate_limit, TIME_FORMAT
+from src.util import log, rate_limit, TIME_FORMAT
 
 QUEUE = queue.Queue(1)
 
@@ -171,3 +172,30 @@ def token_process(microsoft_token, account, sequence):
     xbl_token, xbl_hash = get_xbl_token(microsoft_token)
     xsts_token = get_xsts_token(xbl_token)
     return get_minecraft_token(xsts_token, xbl_hash, account, sequence)
+
+def refresh_tokens(accounts):
+    token_list = []
+    tokens_pulled = 0
+    timestamps = []
+
+    log("Checking Microsoft token status.")
+    microsoft_tokens = [asyncio.run(microsoft_auth(
+        f".\\tokens", account)) for account in accounts]
+
+    log("Retrieving tokens for Minecraft.")
+    for i in range(2):
+        for a, account in enumerate(accounts):
+            if tokens_pulled > 0 and tokens_pulled % 3 == 0:
+                rate_limit(
+                    "Waiting before retrieving more tokens from server.")
+            token, cached, timestamp = token_process(
+                microsoft_tokens[a], account, i)
+            timestamps.append(timestamp)
+            token_list.append(token)
+            if not cached:
+                tokens_pulled = tokens_pulled + 1
+                log(f'Token {i+1} for account "{account}" retrieved from server. ({len(token_list)-(i*5)}/{len(accounts)} accounts) ({i+1}/2 token sets)')
+            else:
+                log(f'Token {i+1} for account "{account}" retrieved from cache. ({len(token_list)-(i*5)}/{len(accounts)} accounts) ({i+1}/2 token sets)')
+
+    return (token_list, min(timestamps))
