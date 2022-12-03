@@ -41,7 +41,7 @@ def name_wait(name, accounts, name_change=False):
                 if name_change == True:
                     urlopen(Request(
                         f"https://api.minecraftservices.com/minecraft/profile/name/{name}", 
-                        headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJ4dWlkIjoiMjUzNTQxNDg2MzU4NzE0NiIsImFnZyI6IkFkdWx0Iiwic3ViIjoiYzEyNjYwYTItMjIxMy00ZjY2LWE4MzgtZjAyMDFkM2U4YWZiIiwibmJmIjoxNjcwMDQ4NjY4LCJhdXRoIjoiWEJPWCIsInJvbGVzIjpbXSwiaXNzIjoiYXV0aGVudGljYXRpb24iLCJleHAiOjE2NzAxMzUwNjgsImlhdCI6MTY3MDA0ODY2OCwicGxhdGZvcm0iOiJVTktOT1dOIiwieXVpZCI6IjM5NGUwMTViNDMxYjQxMzU4NTkwNzVjYzM3M2JhYzA4In0.3HJ-zJ4zHtqO4Poj2j60-x3YKBYoA8OcpcCS5dBGANM"},
+                        headers={"Authorization": tokens[0]},
                         method='PUT'
                     ))
                 return True
