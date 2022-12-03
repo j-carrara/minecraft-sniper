@@ -1,14 +1,14 @@
 # Minecraft Username Sniper
 Automatic Minecraft key authentication, name availability checking, and name claiming.
 
-Every account doesn't need to own minecraft, but they must be set up with an Xbox profile.
-More accounts means that the bot will probe for username availablity more often,
-but it seems that more than *5* accounts runs into issues with rate limiting.
-
 ### Setup:
 
 1. Ensure you have Python 3 installed. No libraries are required for this module.
 2. Add your Microsoft accounts into the `users.txt`, one email per line.
+
+Every account doesn't need to own minecraft, but they must be set up with an Xbox profile.
+More accounts means that the bot will probe for username availablity more often,
+but it seems that more than *5* accounts runs into issues with rate limiting.
 
 **Adding the --name-change flag to your start command will turn on automatic name claiming.**
 
