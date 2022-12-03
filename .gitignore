@@ -1,3 +1,5 @@
 tokens/
 venv/
 __pycache__/
+tokens.json
+scratch.py

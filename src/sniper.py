@@ -3,7 +3,7 @@ import requests
 from time import sleep
 from datetime import datetime, timedelta
 
-from src.authentication import refresh_tokens
+from src.authentication import refresh_all_tokens
 from src.util import log, rate_limit, TIME_FORMAT
 
 
@@ -27,13 +27,13 @@ def check_name(name, token):
 
 def name_wait(name, accounts, name_change=False):
     log(f"Retrieving tokens for all accounts.")
-    tokens, token_time = refresh_tokens(accounts)
+    tokens, token_time = refresh_all_tokens(accounts)
     current_token = 0
     log(f'Name snipe service started for "{name}", will query every {10/len(tokens)}s for availability.')
     while True:
-        if (datetime.now() - timedelta(hours=23)) > token_time:
+        if (datetime.now() + timedelta(hours=1)) > token_time:
             log(f"Tokens expiring soon, refreshing.")
-            tokens, token_time = refresh_tokens(accounts)
+            tokens, token_time = refresh_all_tokens(accounts)
 
         try:
             available = check_name(name, tokens[current_token])

@@ -1,19 +1,12 @@
-
-from xbox.webapi.authentication.manager import AuthenticationManager
-from xbox.webapi.authentication.models import OAuth2TokenResponse
-from xbox.webapi.common.signed_session import SignedSession
-
 import requests
 from urllib.parse import parse_qs, urlparse
 
 import webbrowser
-import os
 import socket
 import json
 from datetime import datetime, timedelta
-import asyncio
 
-from src.util import log, rate_limit, TIME_FORMAT, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPES
+from src.util import log, rate_limit, TIME_FORMAT, CLIENT_ID, REDIRECT_URI, SCOPES
 
 
 def build_url(url, query_fields):
@@ -52,7 +45,6 @@ def refresh_oauth_token(refresh):
         "refresh_token": refresh,
         }
     )
-    print(response.content)
     return (json.loads(response.content)["access_token"], json.loads(response.content)["refresh_token"])
 
 
@@ -92,80 +84,9 @@ def get_xsts_token(xbl_token):
                          })
     return json.loads(xsts.content)["Token"]
 
-class AuthenticationManagerWithPrefill(AuthenticationManager):
+def get_mc_token(xsts_token, xbl_hash):
 
-    async def request_tokens(self, authorization_code: str) -> None:
-        self.oauth = await self.request_oauth_token(authorization_code)
-        self.user_token = await self.request_user_token()
-        self.xsts_token = await self.request_xsts_token(relying_party="rp://api.minecraftservices.com/")
-
-    async def refresh_tokens(self) -> None:
-        if not (self.oauth and self.oauth.is_valid()):
-            self.oauth = await self.refresh_oauth_token()
-        if not (self.user_token and self.user_token.is_valid()):
-            self.user_token = await self.request_user_token()
-        if not (self.xsts_token and self.xsts_token.is_valid()):
-            self.xsts_token = await self.request_xsts_token(relying_party="rp://api.minecraftservices.com/")
-
-
-# async def get_xsts_token(account: str):
-#     async with SignedSession() as session:
-#         auth_mgr = AuthenticationManagerWithPrefill(
-#             session, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
-#         )
-#         token_file = f".\\tokens\\microsoft-token-{account}.json"
-
-#         # Refresh tokens if we have them
-#         if os.path.exists(token_file):
-#             with open(token_file) as f:
-#                 tokens = f.read()
-#             auth_mgr.oauth = OAuth2TokenResponse.parse_raw(tokens)
-#             await auth_mgr.refresh_tokens()
-
-#         # Request new ones if they are not valid
-#         if not (auth_mgr.xsts_token and auth_mgr.xsts_token.is_valid()):
-
-#             server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#             server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-#             server_socket.bind(("0.0.0.0", 8080))
-#             server_socket.listen(1)
-
-#             auth_url = generate_authorization_url(account=account)
-#             webbrowser.open(auth_url)
-#             notification_text = f'Log in to "{account}".'
-#             log(notification_text, type="INPUT")
-
-#             client_connection, _ = server_socket.accept()
-#             request = client_connection.recv(8000).decode()
-#             response = 'HTTP/1.0 302 OK Found\nLocation: https://outlook.live.com/owa/logoff.owa'
-#             client_connection.sendall(response.encode())
-#             client_connection.close()
-#             server_socket.close()
-#             url_path = request.split(" ")[1]
-#             query_params = parse_qs(urlparse(url_path).query)
-#             auth_code = query_params.get("code")
-#             code = auth_code[0] if isinstance(auth_code, list) else auth_code
-
-#             await auth_mgr.request_tokens(code)
-
-#         with open(token_file, mode="w") as f:
-#             f.write(auth_mgr.oauth.json())
-#         xsts_token = json.loads(auth_mgr.xsts_token.json())
-#         return (xsts_token["token"], xsts_token["display_claims"]["xui"][0]["uhs"])
-
-
-def get_minecraft_token(xsts_token, xbl_hash, account, sequence):
-    try:
-        with open(f".\\tokens\\minecraft-tokens.json", "r") as f:
-            file_info = json.load(f)
-    except:
-        file_info = {}
-
-    if account in file_info:
-        if str(sequence) in file_info[account]:
-            if datetime.now() - timedelta(hours=26) < datetime.strptime(file_info[account][str(sequence)]["timestamp"], TIME_FORMAT):
-                return (file_info[account][str(sequence)]["token"], True, datetime.strptime(file_info[account][str(sequence)]["timestamp"], TIME_FORMAT))
-
+    expiry = (datetime.now() + timedelta(seconds=86400)).strftime(TIME_FORMAT)
     minecraft = requests.post("https://api.minecraftservices.com/authentication/login_with_xbox", headers={
         "Content-Type": "application/json",
         "user-agent": "Minecraft Development Personal Project",
@@ -176,35 +97,88 @@ def get_minecraft_token(xsts_token, xbl_hash, account, sequence):
     response = json.loads(minecraft.content)
     if "access_token" not in response:
         rate_limit("Token requests rate limited.")
-        return get_minecraft_token(xsts_token, xbl_hash, account, sequence)
-    token = f'Bearer {json.loads(minecraft.content)["access_token"]}'
+        return get_mc_token(xsts_token, xbl_hash)
+    return (f'Bearer {json.loads(minecraft.content)["access_token"]}', expiry)
 
-    if account in file_info:
-        file_info[account][str(sequence)] = {
-            "timestamp": datetime.now().strftime(TIME_FORMAT),
-            "token": token
+def refresh_oauth(account):
+    refresh_token = None
+    
+    try:
+        with open("tokens.json", "r") as f:
+                tokens = json.load(f)
+                if account in tokens:
+                    refresh_token = tokens[account]["refresh_token"]
+    except:
+        tokens = {}
+
+    if refresh_token == None:
+
+        tokens[account] = {
+            "0": {},
+            "1": {}
         }
+
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind(("0.0.0.0", 8080))
+        server_socket.listen(1)
+
+        auth_url = generate_authorization_url(account=account)
+        webbrowser.open(auth_url)
+        notification_text = f'Log in to "{account}".'
+        log(notification_text, type="INPUT")
+        client_connection, _ = server_socket.accept()
+        request = client_connection.recv(8000).decode()
+        response = 'HTTP/1.0 302 OK Found\nLocation: https://outlook.live.com/owa/logoff.owa'
+        client_connection.sendall(response.encode())
+        client_connection.close()
+        server_socket.close()
+        url_path = request.split(" ")[1]
+        query_params = parse_qs(urlparse(url_path).query)
+        auth_code = query_params.get("code")
+        code = auth_code[0] if isinstance(auth_code, list) else auth_code
+
+        oauth_token, refresh_token = request_new_oauth_token(code)
+
     else:
-        file_info[account] = {
-            str(sequence): {
-                "timestamp": datetime.now().strftime(TIME_FORMAT),
-                "token": token
-            }
-        }
-    with open(f".\\tokens\\minecraft-tokens.json", "w") as f:
-        json.dump(file_info, f)
+        oauth_token, refresh_token = refresh_oauth_token(refresh_token)
 
-    return (token, False, datetime.now())
+    tokens[account]["oauth_token"] = oauth_token
+    tokens[account]["refresh_token"] = refresh_token
+    
+    with open("tokens.json", "w") as f:
+        json.dump(tokens, f)
+    
+    return oauth_token
+
+def refresh_tokens(oauth_token, account, sequence):
+
+    with open("tokens.json", "r") as f:
+        tokens = json.load(f)
+    if "expiry" in tokens[account][sequence]:
+        if datetime.strptime(tokens[account][sequence]["expiry"], TIME_FORMAT) > datetime.now():
+            return (tokens[account][sequence]["mc_token"], True, tokens[account][sequence]["expiry"])
+    
+    xbl_token, xbl_hash = get_xbl_token(oauth_token)
+    xsts_token = get_xsts_token(xbl_token)
+    mc_token, expiry_time = get_mc_token(xsts_token, xbl_hash)
+    
+    tokens[account][sequence]["mc_token"] = mc_token
+    tokens[account][sequence]["expiry"] = expiry_time
+
+    with open("tokens.json", "w") as f:
+        json.dump(tokens, f)
+    
+    return (mc_token, False, tokens[account][sequence]["expiry"])
 
 
-def refresh_tokens(accounts):
+def refresh_all_tokens(accounts):
     token_list = []
     tokens_pulled = 0
     timestamps = []
 
     log("Checking Microsoft token status.")
-    xsts_tokens = [asyncio.run(get_xsts_token(account))
-                   for account in accounts]
+    oauth_tokens = [refresh_oauth(account) for account in accounts]
 
     log("Retrieving tokens for Minecraft.")
     for i in range(2):
@@ -212,15 +186,14 @@ def refresh_tokens(accounts):
             if tokens_pulled > 0 and tokens_pulled % 3 == 0:
                 rate_limit(
                     "Waiting before retrieving more tokens from server.")
-            token, cached, timestamp = get_minecraft_token(
-                xsts_tokens[a][0], xsts_tokens[a][1], account, i)
-            timestamps.append(timestamp)
+            token, cached, timestamp = refresh_tokens(oauth_tokens[a], account, str(i))
+            timestamps.append(datetime.strptime(timestamp, TIME_FORMAT))
             token_list.append(token)
             if not cached:
                 tokens_pulled = tokens_pulled + 1
-                log(f'Token {i+1} for account "{account}" retrieved from server. ({len(token_list)-(i*len(accounts))}/{len(accounts)} accounts) ({i+1}/2 token sets)')
+                log(f'Token {i+1} for account "{account}" retrieved from server. (Account: {len(token_list)-(i*len(accounts))}/{len(accounts)}) (Token: {i+1}/2)')
             else:
-                log(f'Token {i+1} for account "{account}" retrieved from cache. ({len(token_list)-(i*len(accounts))}/{len(accounts)} accounts) ({i+1}/2 token sets)')
+                log(f'Token {i+1} for account "{account}" retrieved from cache. (Account: {len(token_list)-(i*len(accounts))}/{len(accounts)}) (Token: {i+1}/2)')
 
-    log(f"Login tokens will expire on {min(timestamps)+timedelta(hours=24)}.")
+    log(f"Login tokens will expire on {min(timestamps)}.")
     return (token_list, min(timestamps))
