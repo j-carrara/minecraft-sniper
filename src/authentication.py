@@ -13,23 +13,50 @@ import json
 from datetime import datetime, timedelta
 import asyncio
 
-from src.util import log, rate_limit, TIME_FORMAT, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
+from src.util import log, rate_limit, TIME_FORMAT, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPES
+
+
+def build_url(url, query_fields):
+    return url+"?"+'&'.join([f"{field}={query_fields[field]}" for field in query_fields if query_fields[field] != ""])
+
+
+def generate_authorization_url(account=None) -> str:
+    query_fields = {
+        "client_id": CLIENT_ID,
+        "response_type": "code",
+        "approval_prompt": "auto",
+        "scope": SCOPES,
+        "redirect_uri": REDIRECT_URI,
+        "login_hint": account
+    }
+
+    return build_url("https://login.live.com/oauth20_authorize.srf", query_fields)
+
+
+def request_new_oauth_token(authorization):
+    response = requests.post("https://login.live.com/oauth20_token.srf", headers={"content-type": "application/x-www-form-urlencoded"}, data={
+        "client_id": CLIENT_ID,
+        "grant_type": "authorization_code",
+        "code": authorization,
+        "scope": SCOPES,
+        "redirect_uri": REDIRECT_URI,
+    })
+    return (json.loads(response.content)["access_token"], json.loads(response.content)["refresh_token"])
+
+
+def refresh_oauth_token(refresh):
+    response = requests.post("https://login.live.com/oauth20_token.srf", headers={"content-type": "application/x-www-form-urlencoded"}, data={
+        "client_id": CLIENT_ID,
+        "grant_type": "refresh_token",
+        "scope": SCOPES,
+        "refresh_token": refresh,
+        }
+    )
+    print(response.content)
+    return (json.loads(response.content)["access_token"], json.loads(response.content)["refresh_token"])
+
 
 class AuthenticationManagerWithPrefill(AuthenticationManager):
-    def generate_authorization_url(self, state=None, account=None) -> str:
-        query_string = {
-            "client_id": self._client_id,
-            "response_type": "code",
-            "approval_prompt": "auto",
-            "scope": " ".join(self._scopes),
-            "redirect_uri": self._redirect_uri,
-            "login_hint": account
-        }
-
-        if state:
-            query_string["state"] = state
-
-        return "https://login.live.com/oauth20_authorize.srf?" + '&'.join([f"{field}={query_string[field]}" for field in query_string if query_string[field] != ""])
 
     async def request_tokens(self, authorization_code: str) -> None:
         self.oauth = await self.request_oauth_token(authorization_code)
@@ -43,6 +70,7 @@ class AuthenticationManagerWithPrefill(AuthenticationManager):
             self.user_token = await self.request_user_token()
         if not (self.xsts_token and self.xsts_token.is_valid()):
             self.xsts_token = await self.request_xsts_token(relying_party="rp://api.minecraftservices.com/")
+
 
 async def get_xsts_token(account: str):
     async with SignedSession() as session:
@@ -66,7 +94,7 @@ async def get_xsts_token(account: str):
             server_socket.bind(("0.0.0.0", 8080))
             server_socket.listen(1)
 
-            auth_url = auth_mgr.generate_authorization_url(account=account)
+            auth_url = generate_authorization_url(account=account)
             webbrowser.open(auth_url)
             notification_text = f'Log in to "{account}".'
             log(notification_text, type="INPUT")
@@ -88,7 +116,6 @@ async def get_xsts_token(account: str):
             f.write(auth_mgr.oauth.json())
         xsts_token = json.loads(auth_mgr.xsts_token.json())
         return (xsts_token["token"], xsts_token["display_claims"]["xui"][0]["uhs"])
-
 
 
 def get_minecraft_token(xsts_token, xbl_hash, account, sequence):
@@ -133,13 +160,15 @@ def get_minecraft_token(xsts_token, xbl_hash, account, sequence):
 
     return (token, False, datetime.now())
 
+
 def refresh_tokens(accounts):
     token_list = []
     tokens_pulled = 0
     timestamps = []
 
     log("Checking Microsoft token status.")
-    xsts_tokens = [asyncio.run(get_xsts_token(account)) for account in accounts]
+    xsts_tokens = [asyncio.run(get_xsts_token(account))
+                   for account in accounts]
 
     log("Retrieving tokens for Minecraft.")
     for i in range(2):
@@ -147,7 +176,8 @@ def refresh_tokens(accounts):
             if tokens_pulled > 0 and tokens_pulled % 3 == 0:
                 rate_limit(
                     "Waiting before retrieving more tokens from server.")
-            token, cached, timestamp = get_minecraft_token(xsts_tokens[a][0], xsts_tokens[a][1], account, i)
+            token, cached, timestamp = get_minecraft_token(
+                xsts_tokens[a][0], xsts_tokens[a][1], account, i)
             timestamps.append(timestamp)
             token_list.append(token)
             if not cached:

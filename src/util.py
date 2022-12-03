@@ -5,6 +5,7 @@ TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 CLIENT_ID = "8259ec1b-539c-4ec9-b27b-c89f7c73bd31"
 CLIENT_SECRET = ""
 REDIRECT_URI = "http://localhost:8080/auth/callback"
+SCOPES = "XboxLive.signin XboxLive.offline_access"
 
 
 def log(message=None, type="INFO", end="\n"):
