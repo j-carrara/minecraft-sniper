@@ -1,6 +1,5 @@
-import requests
+from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlparse
-
 import webbrowser
 import socket
 import json
@@ -27,87 +26,105 @@ def generate_authorization_url(account=None) -> str:
 
 
 def request_new_oauth_token(authorization):
-    response = requests.post("https://login.live.com/oauth20_token.srf", headers={"content-type": "application/x-www-form-urlencoded"}, data={
+    query = {
         "client_id": CLIENT_ID,
         "grant_type": "authorization_code",
         "code": authorization,
         "scope": SCOPES,
         "redirect_uri": REDIRECT_URI,
-    })
-    return (json.loads(response.content)["access_token"], json.loads(response.content)["refresh_token"])
+    }
+    body = '&'.join([f"{field}={query[field]}" for field in query])
+    content = urlopen(Request("https://login.live.com/oauth20_token.srf", headers={
+                      "content-type": "application/x-www-form-urlencoded"}, data=body.encode("utf-8"), method="POST")).read()
+    return (json.loads(content.decode("utf-8"))["access_token"], json.loads(content.decode("utf-8"))["refresh_token"])
 
 
 def refresh_oauth_token(refresh):
-    response = requests.post("https://login.live.com/oauth20_token.srf", headers={"content-type": "application/x-www-form-urlencoded"}, data={
+    query = {
         "client_id": CLIENT_ID,
         "grant_type": "refresh_token",
         "scope": SCOPES,
         "refresh_token": refresh,
-        }
-    )
-    return (json.loads(response.content)["access_token"], json.loads(response.content)["refresh_token"])
+    }
+    body = '&'.join([f"{field}={query[field]}" for field in query])
+    content = urlopen(Request("https://login.live.com/oauth20_token.srf", headers={
+                      "content-type": "application/x-www-form-urlencoded"}, data=body.encode("utf-8"), method="POST")).read()
+    return (json.loads(content.decode("utf-8"))["access_token"], json.loads(content.decode("utf-8"))["refresh_token"])
 
 
 def get_xbl_token(microsoft_token):
-    xbox = requests.post("https://user.auth.xboxlive.com/user/authenticate",
-                         headers={
-                             "Content-Type": "application/json",
-                             "Accept": "application/json"},
-                         json={
-                             "Properties": {
-                                 "AuthMethod": "RPS",
-                                 "SiteName": "user.auth.xboxlive.com",
-                                 "RpsTicket": f"d={microsoft_token}"
-                             },
-                             "RelyingParty": "http://auth.xboxlive.com",
-                             "TokenType": "JWT"
-                         })
-    response = json.loads(xbox.content)
-    return (response["Token"], response["DisplayClaims"]["xui"][0]["uhs"])
+    content = urlopen(Request(
+        "https://user.auth.xboxlive.com/user/authenticate",
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        data=json.dumps({
+            "Properties": {
+                "AuthMethod": "RPS",
+                "SiteName": "user.auth.xboxlive.com",
+                "RpsTicket": f"d={microsoft_token}"
+            },
+            "RelyingParty": "http://auth.xboxlive.com",
+            "TokenType": "JWT"
+        },
+        ).encode("utf-8"), method="POST")).read()
+
+    return (json.loads(content.decode("utf-8"))["Token"], json.loads(content.decode("utf-8"))["DisplayClaims"]["xui"][0]["uhs"])
 
 
 def get_xsts_token(xbl_token):
-    xsts = requests.post("https://xsts.auth.xboxlive.com/xsts/authorize",
-                         headers={
-                             "Content-Type": "application/json",
-                             "Accept": "application/json"
-                         },
-                         json={
-                             "Properties": {
-                                 "SandboxId": "RETAIL",
-                                 "UserTokens": [
-                                     xbl_token
-                                 ]
-                             },
-                             "RelyingParty": "rp://api.minecraftservices.com/",
-                             "TokenType": "JWT"
-                         })
-    return json.loads(xsts.content)["Token"]
+    content = urlopen(Request(
+        "https://xsts.auth.xboxlive.com/xsts/authorize",
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        data=json.dumps({
+            "Properties": {
+                "SandboxId": "RETAIL",
+                "UserTokens": [
+                    xbl_token
+                ]
+            },
+            "RelyingParty": "rp://api.minecraftservices.com/",
+            "TokenType": "JWT"
+        }).encode("utf-8"), method="POST")).read()
+
+    return json.loads(content.decode("utf-8"))["Token"]
+
 
 def get_mc_token(xsts_token, xbl_hash):
 
     expiry = (datetime.now() + timedelta(seconds=86400)).strftime(TIME_FORMAT)
-    minecraft = requests.post("https://api.minecraftservices.com/authentication/login_with_xbox", headers={
-        "Content-Type": "application/json",
-        "user-agent": "Minecraft Development Personal Project",
-        "Accept": "application/json"
-    }, json={
-        "identityToken": f"XBL3.0 x={xbl_hash};{xsts_token}"
-    })
-    response = json.loads(minecraft.content)
+    content = urlopen(Request(
+        "https://api.minecraftservices.com/authentication/login_with_xbox",
+        headers={
+            "Content-Type": "application/json",
+            "user-agent": "Minecraft Development Personal Project",
+            "Accept": "application/json"
+        },
+        data=json.dumps({
+            "identityToken": f"XBL3.0 x={xbl_hash};{xsts_token}"
+        }).encode("utf-8"),
+        method="POST"
+    )).read()
+
+    response = json.loads(content.decode("utf-8"))
     if "access_token" not in response:
         rate_limit("Token requests rate limited.")
         return get_mc_token(xsts_token, xbl_hash)
-    return (f'Bearer {json.loads(minecraft.content)["access_token"]}', expiry)
+    return (f'Bearer {response["access_token"]}', expiry)
+
 
 def refresh_oauth(account):
     refresh_token = None
-    
+
     try:
         with open("tokens.json", "r") as f:
-                tokens = json.load(f)
-                if account in tokens:
-                    refresh_token = tokens[account]["refresh_token"]
+            tokens = json.load(f)
+            if account in tokens:
+                refresh_token = tokens[account]["refresh_token"]
     except:
         tokens = {}
 
@@ -145,11 +162,12 @@ def refresh_oauth(account):
 
     tokens[account]["oauth_token"] = oauth_token
     tokens[account]["refresh_token"] = refresh_token
-    
+
     with open("tokens.json", "w") as f:
         json.dump(tokens, f)
-    
+
     return oauth_token
+
 
 def refresh_tokens(oauth_token, account, sequence):
 
@@ -158,17 +176,17 @@ def refresh_tokens(oauth_token, account, sequence):
     if "expiry" in tokens[account][sequence]:
         if datetime.strptime(tokens[account][sequence]["expiry"], TIME_FORMAT) > datetime.now():
             return (tokens[account][sequence]["mc_token"], True, tokens[account][sequence]["expiry"])
-    
+
     xbl_token, xbl_hash = get_xbl_token(oauth_token)
     xsts_token = get_xsts_token(xbl_token)
     mc_token, expiry_time = get_mc_token(xsts_token, xbl_hash)
-    
+
     tokens[account][sequence]["mc_token"] = mc_token
     tokens[account][sequence]["expiry"] = expiry_time
 
     with open("tokens.json", "w") as f:
         json.dump(tokens, f)
-    
+
     return (mc_token, False, tokens[account][sequence]["expiry"])
 
 
@@ -186,7 +204,8 @@ def refresh_all_tokens(accounts):
             if tokens_pulled > 0 and tokens_pulled % 3 == 0:
                 rate_limit(
                     "Waiting before retrieving more tokens from server.")
-            token, cached, timestamp = refresh_tokens(oauth_tokens[a], account, str(i))
+            token, cached, timestamp = refresh_tokens(
+                oauth_tokens[a], account, str(i))
             timestamps.append(datetime.strptime(timestamp, TIME_FORMAT))
             token_list.append(token)
             if not cached:

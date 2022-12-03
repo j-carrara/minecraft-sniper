@@ -7,10 +7,8 @@ but it seems that more than *5* accounts runs into issues with rate limiting.
 
 ### Setup:
 
-1. Ensure you have Python 3 installed.
-2. Install the required modules from the requirements.txt:
-```pip install -r requirements.txt```
-3. Add your Microsoft accounts into the `users.txt`, one email per line.
+1. Ensure you have Python 3 installed. No libraries are required for this module.
+2. Add your Microsoft accounts into the `users.txt`, one email per line.
 
 **Adding the --name-change flag to your start command will turn on automatic name claiming.**
 
