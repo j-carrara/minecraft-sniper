@@ -15,6 +15,6 @@ with open("users.txt", "r") as f:
 log(f"Found {len(accounts)} accounts in user file.")
 
 try:
-    name_wait(name, accounts, False)
+    name_wait(name, accounts, name_change)
 except KeyboardInterrupt:
     log("Service stopped.")
