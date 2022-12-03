@@ -42,12 +42,12 @@ class AuthenticationManagerWithPrefill(AuthenticationManager):
         )
 
 
-async def microsoft_auth(token_filepath: str, account: str):
+async def get_xsts_token(account: str):
     async with SignedSession() as session:
         auth_mgr = AuthenticationManagerWithPrefill(
             session, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
         )
-        token_file = token_filepath + f"\\microsoft-token-{account}.json"
+        token_file = f".\\tokens\\microsoft-token-{account}.json"
 
         # Refresh tokens if we have them
         if os.path.exists(token_file):
@@ -84,45 +84,10 @@ async def microsoft_auth(token_filepath: str, account: str):
 
         with open(token_file, mode="w") as f:
             f.write(auth_mgr.oauth.json())
+        print(auth_mgr.xsts_token.json())
+        xsts_token = json.loads(auth_mgr.xsts_token.json())
+        return (xsts_token["token"], xsts_token["display_claims"]["xui"][0]["uhs"])
 
-        return auth_mgr.oauth.access_token
-
-
-def get_xbl_token(microsoft_token):
-    xbox = requests.post("https://user.auth.xboxlive.com/user/authenticate",
-                         headers={
-                             "Content-Type": "application/json",
-                             "Accept": "application/json"},
-                         json={
-                             "Properties": {
-                                 "AuthMethod": "RPS",
-                                 "SiteName": "user.auth.xboxlive.com",
-                                 "RpsTicket": f"d={microsoft_token}"
-                             },
-                             "RelyingParty": "http://auth.xboxlive.com",
-                             "TokenType": "JWT"
-                         })
-    response = json.loads(xbox.content)
-    return (response["Token"], response["DisplayClaims"]["xui"][0]["uhs"])
-
-
-def get_xsts_token(xbl_token):
-    xsts = requests.post("https://xsts.auth.xboxlive.com/xsts/authorize",
-                         headers={
-                             "Content-Type": "application/json",
-                             "Accept": "application/json"
-                         },
-                         json={
-                             "Properties": {
-                                 "SandboxId": "RETAIL",
-                                 "UserTokens": [
-                                     xbl_token
-                                 ]
-                             },
-                             "RelyingParty": "rp://api.minecraftservices.com/",
-                             "TokenType": "JWT"
-                         })
-    return json.loads(xsts.content)["Token"]
 
 
 def get_minecraft_token(xsts_token, xbl_hash, account, sequence):
@@ -167,20 +132,13 @@ def get_minecraft_token(xsts_token, xbl_hash, account, sequence):
 
     return (token, False, datetime.now())
 
-
-def token_process(microsoft_token, account, sequence):
-    xbl_token, xbl_hash = get_xbl_token(microsoft_token)
-    xsts_token = get_xsts_token(xbl_token)
-    return get_minecraft_token(xsts_token, xbl_hash, account, sequence)
-
 def refresh_tokens(accounts):
     token_list = []
     tokens_pulled = 0
     timestamps = []
 
     log("Checking Microsoft token status.")
-    microsoft_tokens = [asyncio.run(microsoft_auth(
-        f".\\tokens", account)) for account in accounts]
+    xsts_tokens = [asyncio.run(get_xsts_token(account)) for account in accounts]
 
     log("Retrieving tokens for Minecraft.")
     for i in range(2):
@@ -188,8 +146,7 @@ def refresh_tokens(accounts):
             if tokens_pulled > 0 and tokens_pulled % 3 == 0:
                 rate_limit(
                     "Waiting before retrieving more tokens from server.")
-            token, cached, timestamp = token_process(
-                microsoft_tokens[a], account, i)
+            token, cached, timestamp = get_minecraft_token(xsts_tokens[a][0], xsts_tokens[a][1], account, i)
             timestamps.append(timestamp)
             token_list.append(token)
             if not cached:
