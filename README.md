@@ -2,7 +2,8 @@
 Automatic Minecraft key authentication, name availability checking, and name claiming.
 
 Every account doesn't need to own minecraft, but they must be set up with an Xbox profile.
-More accounts means that the bot will probe for username availablity more often.
+More accounts means that the bot will probe for username availablity more often,
+but it seems that more than *5* accounts runs into issues with rate limiting.
 
 ### Setup:
 

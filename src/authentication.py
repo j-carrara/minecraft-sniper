@@ -32,6 +32,19 @@ class AuthenticationManagerWithPrefill(AuthenticationManager):
 
         return "https://login.live.com/oauth20_authorize.srf?" + '&'.join([f"{field}={query_string[field]}" for field in query_string if query_string[field] != ""])
 
+    async def request_tokens(self, authorization_code: str) -> None:
+        self.oauth = await self.request_oauth_token(authorization_code)
+        self.user_token = await self.request_user_token()
+        self.xsts_token = await self.request_xsts_token(relying_party="rp://api.minecraftservices.com/")
+
+    async def refresh_tokens(self) -> None:
+        if not (self.oauth and self.oauth.is_valid()):
+            self.oauth = await self.refresh_oauth_token()
+        if not (self.user_token and self.user_token.is_valid()):
+            self.user_token = await self.request_user_token()
+        if not (self.xsts_token and self.xsts_token.is_valid()):
+            self.xsts_token = await self.request_xsts_token(relying_party="rp://api.minecraftservices.com/")
+
 async def get_xsts_token(account: str):
     async with SignedSession() as session:
         auth_mgr = AuthenticationManagerWithPrefill(
@@ -140,9 +153,9 @@ def refresh_tokens(accounts):
             token_list.append(token)
             if not cached:
                 tokens_pulled = tokens_pulled + 1
-                log(f'Token {i+1} for account "{account}" retrieved from server. ({len(token_list)-(i*5)}/{len(accounts)} accounts) ({i+1}/2 token sets)')
+                log(f'Token {i+1} for account "{account}" retrieved from server. ({len(token_list)-(i*len(accounts))}/{len(accounts)} accounts) ({i+1}/2 token sets)')
             else:
-                log(f'Token {i+1} for account "{account}" retrieved from cache. ({len(token_list)-(i*5)}/{len(accounts)} accounts) ({i+1}/2 token sets)')
+                log(f'Token {i+1} for account "{account}" retrieved from cache. ({len(token_list)-(i*len(accounts))}/{len(accounts)} accounts) ({i+1}/2 token sets)')
 
     log(f"Login tokens will expire on {min(timestamps)+timedelta(hours=24)}.")
     return (token_list, min(timestamps))
