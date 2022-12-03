@@ -2,7 +2,6 @@
 from xbox.webapi.authentication.manager import AuthenticationManager
 from xbox.webapi.authentication.models import OAuth2TokenResponse
 from xbox.webapi.common.signed_session import SignedSession
-from xbox.webapi.scripts import CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
 
 import requests
 from urllib.parse import parse_qs, urlparse
@@ -14,7 +13,7 @@ import json
 from datetime import datetime, timedelta
 import asyncio
 
-from src.util import log, rate_limit, TIME_FORMAT
+from src.util import log, rate_limit, TIME_FORMAT, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
 
 class AuthenticationManagerWithPrefill(AuthenticationManager):
     def generate_authorization_url(self, state=None, account=None) -> str:
