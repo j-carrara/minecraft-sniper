@@ -6,25 +6,18 @@ from xbox.webapi.scripts import CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
 
 import requests
 from urllib.parse import parse_qs, urlparse
-from yarl import URL
 
 import webbrowser
 import os
 import socket
 import json
-import queue
 from datetime import datetime, timedelta
-from typing import Optional
 import asyncio
 
 from src.util import log, rate_limit, TIME_FORMAT
 
-QUEUE = queue.Queue(1)
-
-
 class AuthenticationManagerWithPrefill(AuthenticationManager):
-    def generate_authorization_url(self, state: Optional[str] = None, account: str = None) -> str:
-        """Generate Windows Live Authorization URL."""
+    def generate_authorization_url(self, state=None, account=None) -> str:
         query_string = {
             "client_id": self._client_id,
             "response_type": "code",
@@ -37,10 +30,7 @@ class AuthenticationManagerWithPrefill(AuthenticationManager):
         if state:
             query_string["state"] = state
 
-        return str(
-            URL("https://login.live.com/oauth20_authorize.srf").with_query(query_string)
-        )
-
+        return "https://login.live.com/oauth20_authorize.srf?" + '&'.join([f"{field}={query_string[field]}" for field in query_string if query_string[field] != ""])
 
 async def get_xsts_token(account: str):
     async with SignedSession() as session:
@@ -84,7 +74,6 @@ async def get_xsts_token(account: str):
 
         with open(token_file, mode="w") as f:
             f.write(auth_mgr.oauth.json())
-        print(auth_mgr.xsts_token.json())
         xsts_token = json.loads(auth_mgr.xsts_token.json())
         return (xsts_token["token"], xsts_token["display_claims"]["xui"][0]["uhs"])
 
